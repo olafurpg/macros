@@ -29,6 +29,7 @@ lazy val enginesDotc = project
   .settings(
     moduleName := "dotc-engine",
     description := "Dotc implementation of interfaces for new-style Scala macros",
+    SettingKey[Boolean]("ide-skip-project") := true,
     scalaVersion := dotty,
     crossScalaVersions := List(dotty),
     libraryDependencies += "ch.epfl.lamp" %% "dotty-compiler" % dotty
