@@ -5,10 +5,12 @@ import scala.macros.semantic.Flags
 import scala.reflect.internal.util.SourceFile
 import scala.reflect.internal.{Flags => gf}
 import scala.reflect.macros.contexts.Context
+import Utils._
+import org.scalactic.MacroOwnerRepair
 
 case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags {
   val g = ctx.universe
-  import ctx.universe._
+  import g._
   // =========
   // Expansion
   // =========
@@ -17,6 +19,7 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
     def path: Path = underlying.file.file.toPath
   }
   case class Position(underlying: g.Position) extends macros.core.Position {
+    override def lineContent: String = underlying.lineContent
     override def input: Input = Input(underlying.source)
     override def line: Int = underlying.line
   }
@@ -136,6 +139,7 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
     }
   }
   override type Term = g.Tree
+  override def termTpe(term: Term): Type = g.TypeTree(term.tpe)
   type Ref = g.RefTree
   override type Name = c.Name
   implicit class XtensionGTermName(gtree: g.SymTree with g.NameTree) {
@@ -160,6 +164,7 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
     TermName(sym.name.decoded).setSymbol(sym)
   override def TermNameUnapply(arg: Any): Option[String] = arg match {
     case t: c.TermName => Some(t.value)
+    case t: g.Ident if t.isTerm => Some(t.name.decoded)
     case _ => None
   }
 
@@ -193,6 +198,15 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
 
   override def TermBlock(stats: List[Tree]): Term =
     g.gen.mkBlock(stats.toGStats)
+  override def TermFunction(params: List[TermParam], body: Term): Term =
+    g.Function(params, body)
+  override def TermFunctionUnapply(arg: Any): Option[(List[TermParam], Term)] =
+    arg match {
+      case g.Function(vparams, body) => Some(vparams -> body)
+      case _ => None
+    }
+  override def TermIf(cond: Term, thenp: Term, elsep: Term): Term =
+    g.If(cond, thenp, elsep)
 
   override type TermParam = g.ValDef
   override def TermParam(
@@ -209,20 +223,6 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
     val gdefault = default.getOrElse(g.EmptyTree)
     g.ValDef(mods.toGModifiers | gf.PARAM, gname, gtpt, gdefault)
   }
-
-  // =====
-  // Types
-  // =====
-  override type TypeName = c.TypeName
-  override def TypeName(value: String): TypeName =
-    new c.TypeName(value)
-  override def TypeNameSymbol(sym: Symbol): TypeName =
-    TypeName(sym.name.decoded).setSymbol(sym)
-
-  override def TypeSelect(qual: Term, name: TypeName): Type =
-    g.Select(qual, name.toGTypeName)
-  override def TypeApply(tpe: Type, targs: List[Type]): Type =
-    g.AppliedTypeTree(tpe, targs)
 
   type Pat = g.Tree
 
@@ -308,6 +308,18 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
   // =====
   // Types
   // =====
+  override type Type = g.Tree
+  override def tpeWiden(tpe: g.Tree): g.Tree = g.TypeTree(tpe.tpe.widen)
+  override type TypeName = c.TypeName
+  override def TypeName(value: String): TypeName =
+    new c.TypeName(value)
+  override def TypeNameSymbol(sym: Symbol): TypeName =
+    TypeName(sym.name.decoded).setSymbol(sym)
+
+  override def TypeSelect(qual: Term, name: TypeName): Type =
+    g.Select(qual, name.toGTypeName)
+  override def TypeApply(tpe: Type, targs: List[Type]): Type =
+    g.AppliedTypeTree(tpe, targs)
   override type TypeParam = g.TypeDef
   def TypeParam(
       mods: List[Mod],
@@ -317,7 +329,6 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
       vbounds: List[Type],
       cbounds: List[Type]
   ): TypeParam = ???
-  override type Type = g.Tree
   implicit class XtensionToType(gtpe: g.Type) {
     def toType: Type = {
       gtpe match {
@@ -359,9 +370,26 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
     }
   }
 
-  // ==========
-  // Extensions
-  // ==========
+  // ========================
+  // Transversers
+  // ========================
+  type Transformer = g.Transformer
+  override def transformRun(transformer: Transformer, tree: Tree): Tree = {
+    // NOTE(olafur) resetLocalAttrs is unsafe, we
+//    val ownerRepair = new MacroOwnerRepair[ctx.type](ctx)
+    val transformed = transformer.transform(tree)
+//    !ownerRepair.repairOwners(ctx.Expr(!transformed)).tree
+    transformed
+  }
+  override def Transformer(f: PartialFunction[Tree, Tree]): Transformer = {
+    object transformer extends g.Transformer {
+      val defaultSuper: Tree => Tree = super.transform
+      override def transform(tree: Tree): Tree = {
+        f.lift.apply(tree).getOrElse(super.transform(tree))
+      }
+    }
+    transformer
+  }
 
   // ========================
   // Custom trees
@@ -474,5 +502,13 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
       def qualifier: g.Tree = g.EmptyTree
       def name: g.Name = g.nme.WILDCARD
     }
+  }
+}
+
+object Utils {
+  // Cast between g.Tree and ctx.universe.Tree where g is defined as
+  // val g = ctx.universe
+  implicit class XtensionBang[A](val a: A) extends AnyVal {
+    def unary_![B]: B = a.asInstanceOf[B]
   }
 }

@@ -10,6 +10,7 @@ trait Universe {
 
   type Term
   type TermName
+  def termTpe(term: Term): Type
   type TermParam
 
   type Defn
@@ -29,6 +30,11 @@ trait Universe {
 
   def fresh(prefix: String): String
 
+  type Transformer
+  def Transformer(f: PartialFunction[Tree, Tree]): Transformer
+  def transformRun(transformer: Transformer, tree: Tree): Tree
+//  def traverse(tree: Tree)(f: PartialFunction[F, Unit]): Tree
+
   def treePosition(tree: Tree): Position
   def treeSyntax(tree: Tree): String
   def treeStructure(tree: Tree): String
@@ -44,6 +50,9 @@ trait Universe {
   def TermApplyUnapply(arg: Any): Option[(Term, List[Term])]
   def TermApplyType(fun: Term, args: List[Type]): Term
   def TermBlock(stats: List[Tree]): Term
+  def TermFunction(params: List[TermParam], body: Term): Term
+  def TermFunctionUnapply(arg: Any): Option[(List[TermParam], Term)]
+  def TermIf(cond: Term, thenp: Term, elsep: Term): Term
   def LitString(value: String): Lit
   def LitInt(value: Int): Lit
   def Self(name: Name, decltpe: Option[Type]): Self
@@ -85,6 +94,11 @@ trait Universe {
   ): Defn
 
   // =========
+  // Types
+  // =========
+  def tpeWiden(tpe: Type): Type
+
+  // =========
   // Semantic
   // =========
   type Mirror
@@ -112,6 +126,7 @@ trait Input extends Any {
 }
 
 trait Position extends Any {
+  def lineContent: String
   def line: Int
   def input: Input
 }

@@ -47,6 +47,9 @@ package object macros {
   }
   type Term <: Stat
   implicit class XtensionTerm(val term: Term) extends AnyVal {
+    def transform(f: PartialFunction[Term, Term]): Term =
+      !universe.transformRun(!universe.Transformer(!f), !term)
+    def tpe(implicit m: Mirror): Type = !universe.termTpe(!term)
     def select(name: String): Term.Select = Term.Select(term, Term.Name(name))
     def select(name: List[String]): Term = name.foldLeft(term) {
       case (qual, name) => Term.Select(qual, Term.Name(name))
@@ -88,8 +91,18 @@ package object macros {
       def apply(stats: List[Stat]): Term =
         !universe.TermBlock(!stats)
     }
+    object Function {
+      def apply(params: List[Term.Param], body: Term): Term =
+        !universe.TermFunction(!params, !body)
+      def unapply(arg: Any): Option[(List[Term.Param], Term)] =
+        !universe.TermFunctionUnapply(arg)
+    }
     object New {
       def apply(init: Init): Term = !universe.TermNew(!init)
+    }
+    object If {
+      def apply(cond: Term, thenp: Term, elsep: Term): Term =
+        !universe.TermIf(!cond, !thenp, !elsep)
     }
     type Param
     object Param {
@@ -113,9 +126,10 @@ package object macros {
       def apply(value: scala.Int): Lit.Int = !universe.LitInt(value)
     }
   }
-  type Type
+  type Type <: Tree
   implicit class XtensionType(val tpe: Type) extends AnyVal {
     def caseFields: List[Denotation] = !universe.caseFields(!tpe)
+    def widen: Type = !universe.tpeWiden(!tpe)
   }
   object Type {
     type Ref <: Type

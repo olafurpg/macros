@@ -1,5 +1,4 @@
 import bintray.BintrayPlugin.autoImport._
-import ch.epfl.scala.sbt.release.ReleaseEarlyPlugin.autoImport._
 import com.typesafe.sbt.SbtPgp.autoImport._
 import dotty.tools.sbtplugin.DottyPlugin.autoImport._
 import sbt.Def
@@ -132,8 +131,7 @@ object Build extends AutoPlugin {
         url("http://geirsson.com")
       )
     ),
-    PgpKeys.pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toCharArray()),
-    releaseEarlyWith := BintrayPublisher
+    PgpKeys.pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toCharArray())
   )
 
   override def projectSettings: Seq[Def.Setting[_]] = List(

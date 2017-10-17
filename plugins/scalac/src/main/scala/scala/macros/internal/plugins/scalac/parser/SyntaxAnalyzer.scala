@@ -32,11 +32,11 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
 
     override def funDefRest(start: Offset, nameOff: Offset, mods: Modifiers, name: Name): Tree = {
       super.funDefRest(start, nameOff, mods, name) match {
-        case newmacro @ DefDef(mods, _, _, _, _, Block(_, _) | Apply(_, _)) if mods.isMacro =>
+        case newmacro @ DefDef(mods, _, _, _, _, Block(_, _) | Apply(_, _) | Match(_, _))
+            if mods.isMacro =>
           if (!hasLibraryDependencyOnScalamacros) MissingLibraryDependencyOnScalamacros(r2p(start))
           copyDefDef(newmacro)(mods = mods.markNewMacro(r2p(start)))
-        case other =>
-          other
+        case other => other
       }
     }
 
@@ -388,7 +388,10 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
             catch { case ex: _root_.java.lang.ClassCastException => failMacroEngine(ex) }
           }
           val result = $implName($thisArgName, ..$otherArgNames)(..$capabilityArgNames)
-          $cName.Expr[_root_.scala.Nothing](result.asInstanceOf[$cName.Tree])
+          val expanded = $cName.Expr[_root_.scala.Nothing](result.asInstanceOf[$cName.Tree])
+          val MacroOwnerRepair = "org.scalactic.MacroOwnerRepair"
+          val repaired = invokeEngineMethod(MacroOwnerRepair, "apply", $cName, expanded)
+          repaired.asInstanceOf[$cName.Expr[_root_.scala.Nothing]]
         }
       """
     }
