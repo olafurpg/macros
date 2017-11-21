@@ -46,6 +46,15 @@ trait Definitions { self: ReflectToolkit =>
       if (isNewMacroMetadata) newMacroMetadata(ann.args) else None
     }
 
+    implicit class XtensionTreeRepeated(tree: Tree) {
+      def toSeq: Tree = AppliedTypeTree(scalaDot(TypeName("Seq")), List(tree))
+      def toRepeated: Tree = AppliedTypeTree(scalaDot(tpnme.REPEATED_PARAM_CLASS_NAME), List(tree))
+      def isRepeated: Boolean = tree match {
+        case AppliedTypeTree(Select(_, tpnme.REPEATED_PARAM_CLASS_NAME), List(_)) => true
+        case _ => false
+      }
+    }
+
     implicit class XtensionDefinitionsModifiers(mods: Modifiers) {
       def markNewMacro(pos: Position): Modifiers = {
         if (NewMacroMetadata == NoSymbol) mods
@@ -91,6 +100,7 @@ trait Definitions { self: ReflectToolkit =>
     lazy val MacrosStat: Tree = apiRef("Stat")
     lazy val MacrosTerm: Tree = apiRef("Term")
     lazy val MacrosTypedTerm: Tree = tpdRef("Term")
+    lazy val MacrosTypedTermRepeated: Tree = MacrosTypedTerm.toRepeated
     lazy val MacrosType: Tree = apiRef("Type")
     lazy val MacrosMirror: Tree = apiRef("Mirror")
     lazy val MacrosExpansion: Tree = apiRef("Expansion")

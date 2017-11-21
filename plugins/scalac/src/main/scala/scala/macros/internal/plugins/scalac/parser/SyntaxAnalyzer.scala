@@ -205,7 +205,10 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
           val thisParam3 =
             atPos(tree.pos)(ValDef(NoMods, thisParamName3, MacrosTypedTerm, EmptyTree))
           val vvparams3 = vparamss.flatten.map(p => {
-            val tpt3 = if (isMacroAnnotation) MacrosStat else MacrosTypedTerm
+            val tpt3 =
+              if (isMacroAnnotation) MacrosStat
+              else if (p.tpt.isRepeated) MacrosTypedTermRepeated
+              else MacrosTypedTerm
             atPos(p.pos)(ValDef(NoMods, p.name, tpt3, EmptyTree))
           })
           val vtparams3 = tparams.map(p => {
@@ -258,7 +261,11 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
       }
       val stats = List(macroDef)
       val mstats = List(shimDef, implDef, abiDef)
-      println(mstats)
+      if (abiDef.name.toString == "printf") {
+        pprint.log(shimDef.toString, height = 1000)
+        pprint.log(implDef.toString, height = 1000)
+        pprint.log(abiDef.toString, height = 1000)
+      }
       (stats, mstats)
     }
 
@@ -271,7 +278,7 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
     ): Tree = {
       val cName = c.name
       val thisArgName = unit.freshTermName("prefix$")
-      val otherArgDefs = {
+      val otherArgDefs: List[ValDef] = {
         if (isMacroAnnotation) {
           val List(defnParam) = vvparams
           val defnArgName = unit.freshTermName(defnParam.name.toString + "$")
@@ -291,10 +298,13 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
         } else {
           val vargDefs = vvparams.map(vvparam => {
             val argName = unit.freshTermName(vvparam.name.toString + "$")
+            val tp =
+              if (vvparam.tpt.isRepeated) tq"_root_.scala.Seq[$MacrosTypedTerm]"
+              else MacrosTypedTerm
             q"""
               val $argName = {
                 try {
-                  ${vvparam.name}.asInstanceOf[_root_.scala.macros.tpd.Term]
+                  ${vvparam.name}.asInstanceOf[$tp]
                 } catch {
                   case ex: _root_.java.lang.ClassCastException => failMacroEngine(ex)
                 }
@@ -317,7 +327,11 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
           vargDefs ++ targDefs
         }
       }
-      val otherArgNames = otherArgDefs.map(_.name)
+      val otherArgNames: List[Tree] =
+        if (vvparams.lastOption.exists(_.tpt.isRepeated))
+          otherArgDefs.init.map(v => Ident(v.name)) :+ q"${otherArgDefs.last.name}: _*"
+        else
+          otherArgDefs.map(v => Ident(v.name))
       val mirrorArgName = unit.freshTermName("mirror$")
       val expansionArgName = unit.freshTermName("expansion$")
       val capabilityArgNames = {

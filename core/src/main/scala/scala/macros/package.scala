@@ -1,6 +1,7 @@
 package scala
 
 import scala.language.implicitConversions
+import scala.macros.internal.XtensionBang
 
 package object macros {
 
@@ -9,10 +10,6 @@ package object macros {
     val result = universeStore.get
     if (result == null) sys.error("this API can only be called in a macro expansion")
     else result
-  }
-
-  private implicit class XtensionBang[A](val a: A) extends AnyVal {
-    def unary_![B]: B = a.asInstanceOf[B]
   }
 
   def enclosingOwner: Symbol = !universe.enclosingOwner

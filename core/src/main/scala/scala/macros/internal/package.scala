@@ -2,6 +2,9 @@ package scala
 package macros
 
 package object internal {
+  implicit class XtensionBang[A](val a: A) extends AnyVal {
+    def unary_![B]: B = a.asInstanceOf[B]
+  }
   def unsupported: Nothing = {
     val st = new Exception().getStackTrace.drop(1)
     val name = st.head.getMethodName

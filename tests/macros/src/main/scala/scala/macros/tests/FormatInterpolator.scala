@@ -21,7 +21,7 @@ object FormatInterpolator {
 
     format match {
       case Lit.String(s_format) =>
-        var paramsStack = List[Term](arg)
+        var paramsStack: List[Term] = arg.map(tpd2splice).toList
         def pop(): Term = {
           val head :: tail = paramsStack
           paramsStack = tail
