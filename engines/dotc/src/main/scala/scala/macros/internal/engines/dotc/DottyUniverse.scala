@@ -14,6 +14,7 @@ import Constants.Constant
 import Contexts.Context
 import StdNames._
 import Symbols.NoSymbol
+import dotty.tools.dotc.ast.Trees.Literal
 
 case class DottyUniverse(prefix: untpd.Tree)(implicit ctx: Context) extends macros.core.Universe {
 
@@ -93,6 +94,10 @@ case class DottyUniverse(prefix: untpd.Tree)(implicit ctx: Context) extends macr
   }
 
   def LitString(value: String): Lit = untpd.Literal(Constant(value)).autoPos
+  override def LitStringUnapply(arg: Any): Option[String] = arg match {
+    case Literal(Constant(s: String)) => Some(s)
+    case _ => None
+  }
   def LitInt(value: Int): Lit = untpd.Literal(Constant(value)).autoPos
   def LitNull: Lit = untpd.Literal(Constant(null)).autoPos
 

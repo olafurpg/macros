@@ -103,6 +103,7 @@ package object macros {
     type String <: Lit
     object String {
       def apply(value: Predef.String): Lit.String = !universe.LitString(value)
+      def unapply(arg: Any): Option[Predef.String] = !universe.LitStringUnapply(arg)
     }
     type Int <: Lit
     object Int {
@@ -114,6 +115,7 @@ package object macros {
 
   type TypeTree <: Tree
   object TypeTree {
+    def apply(tpe: Type): TypeTree = !universe.typeTreeOf(!tpe)
     object Name {
       def apply(value: String): TypeTree = !universe.TypeName(value)
     }

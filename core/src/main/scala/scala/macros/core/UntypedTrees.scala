@@ -44,6 +44,7 @@ trait UntypedTrees { this: Universe =>
   ): TermParam
 
   def LitString(value: String): Lit
+  def LitStringUnapply(arg: Any): Option[String]
   def LitInt(value: Int): Lit
   def LitNull: Lit
 

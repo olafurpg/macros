@@ -258,6 +258,7 @@ abstract class SyntaxAnalyzer extends NscSyntaxAnalyzer with ReflectToolkit {
       }
       val stats = List(macroDef)
       val mstats = List(shimDef, implDef, abiDef)
+      println(mstats)
       (stats, mstats)
     }
 

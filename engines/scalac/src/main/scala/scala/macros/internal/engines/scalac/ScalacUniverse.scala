@@ -117,6 +117,10 @@ case class ScalacUniverse(ctx: Context) extends macros.core.Universe with Flags 
   // =====
   override type Lit = ctx.universe.Literal
   override def LitString(value: String): Lit = ctx.universe.Literal(ctx.universe.Constant(value))
+  override def LitStringUnapply(arg: Any): Option[String] = arg match {
+    case Literal(Constant(s: String)) => Some(s)
+    case _ => None
+  }
   override def LitInt(value: Int): Lit = ctx.universe.Literal(ctx.universe.Constant(value))
 
   // =====

@@ -15,6 +15,5 @@ class Plugin(val global: Global)
   val name = "scalamacros-plugins-scalac"
   val description = "Implementation of new-style Scala macros for scalac"
   val components = Nil
-  hijackSyntaxAnalyzer()
   global.analyzer.addMacroPlugin(MacroPlugin)
 }
