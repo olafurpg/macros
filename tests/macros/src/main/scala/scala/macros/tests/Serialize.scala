@@ -15,7 +15,10 @@ object Serialize {
     "\"" + x + "\""
   }
 
-  def materialize[T]: Serialize[T] = macro {
+  @macros.socrates
+  def materialize[T]: Serialize[T] = macro impl[T]
+  def impl[T: WeakTypeTag](c: Expansion): Term = {
+    val T = weakTypeTag[T].tpe
     val instance = Term.fresh("instance")
     val param = Term.fresh("x")
     val buf = Term.fresh("buf")
@@ -48,7 +51,7 @@ object Serialize {
       val separators = serializerss.map(
         _ => Term.Apply(Term.Select(Term.Name(buf), append), Lit.String(", ") :: Nil)
       )
-      serializerss.zip(separators).map({ case (ss, s) => ss :+ s }).flatten.dropRight(1)
+      serializerss.zip(separators).flatMap { case (ss, s) => ss :+ s }.dropRight(1)
     }
     var stats = List.newBuilder[Stat]
     stats += Defn.Val(
