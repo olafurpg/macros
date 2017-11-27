@@ -16,8 +16,6 @@ package object macros {
     def unary_![B]: B = a.asInstanceOf[B]
   }
 
-  def enclosingOwner: Symbol = !universe.enclosingOwner
-  def enclosingPosition: Position = !universe.enclosingPosition
   type Input = core.Input
   type Position = core.Position
   type Symbol <: AnyRef
@@ -34,6 +32,10 @@ package object macros {
   }
   type Mirror
   type Expansion
+  implicit class XtensionExpansion(val expansion: Expansion) extends AnyVal {
+    def enclosingOwner: Symbol = !universe.enclosingOwner
+    def enclosingPosition: Position = !universe.enclosingPosition
+  }
   type Tree
   implicit class XtensionTree(val tree: Tree) extends AnyVal {
     def pos: Position = !universe.treePosition(!tree)
@@ -140,8 +142,7 @@ package object macros {
     }
   }
 
-  type TypeTag[T]
-  def typeTag[T](implicit ev: TypeTag[T]): TypeTag[T] = ev
+  case class TypeTag[T](tpe: Type)
   type Type
   object Type {
     type TypeRef <: Type

@@ -8,8 +8,6 @@ trait Universe extends UntypedTrees with TypedTrees {
 
   def fresh(prefix: String): String
 
-  type TypeTag[T]
-
   type Symbol
   def root: Symbol // _root_ package symbol
   def symName(sym: Symbol): String
@@ -24,6 +22,8 @@ trait Universe extends UntypedTrees with TypedTrees {
   def typeRef(path: String): Type
   def appliedType(tp: Type, args: List[Type]): Type
   def typeTreeOf(tp: Type): TypeTree
+
+  class TypeType[T](val tpe: Type)
 
   def enclosingPosition: Position
   def enclosingOwner: Symbol
