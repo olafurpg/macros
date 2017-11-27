@@ -1,10 +1,14 @@
 package scala.macros.core
 
+import scala.language.higherKinds
+
 import java.nio.file.Path
 
 trait Universe extends UntypedTrees with TypedTrees {
 
   def fresh(prefix: String): String
+
+  type TypeTag[T]
 
   type Symbol
   def root: Symbol // _root_ package symbol

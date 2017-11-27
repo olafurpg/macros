@@ -1,5 +1,6 @@
 package scala
 
+import scala.language.higherKinds
 import scala.language.implicitConversions
 
 package object macros {
@@ -139,6 +140,8 @@ package object macros {
     }
   }
 
+  type TypeTag[T]
+  def typeTag[T](implicit ev: TypeTag[T]): TypeTag[T] = ev
   type Type
   object Type {
     type TypeRef <: Type
