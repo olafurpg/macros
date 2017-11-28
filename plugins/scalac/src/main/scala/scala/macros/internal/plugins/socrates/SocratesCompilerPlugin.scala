@@ -21,112 +21,41 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
   global.analyzer.addMacroPlugin(SocratesMacroPlugin)
 
   object SocratesMacroPlugin extends analyzer.MacroPlugin { socratesMacro =>
+
+    def isSocratesMacro(annots: List[AnnotationInfo]): Boolean =
+      annots.exists(_.tpe <:< typeOf[scala.macros.socrates])
+
     override def pluginsMacroRuntime(
         expandee: global.analyzer.global.Tree
     ): Option[global.analyzer.MacroRuntime] = {
-      macroLogVerbose(s"looking for macro implementation: ${expandee.symbol}")
-      def mkResolver =
-        new PluginRuntimeResolver(expandee.symbol).resolveRuntime()
-      Some(newMacroRuntimesCache.getOrElseUpdate(expandee.symbol, mkResolver))
+      if (!isSocratesMacro(expandee.symbol.annotations)) None
+      else {
+        macroLogVerbose(s"looking for macro implementation: ${expandee.symbol}")
+        def mkResolver =
+          new PluginRuntimeResolver(expandee.symbol).resolveRuntime()
+        Some(newMacroRuntimesCache.getOrElseUpdate(expandee.symbol, mkResolver))
+      }
     }
 
     override def pluginsMacroArgs(
         typer: global.analyzer.Typer,
         expandee: global.analyzer.global.Tree
     ): Option[global.analyzer.MacroArgs] = {
-      val isSocratesMacro =
-        expandee.symbol.annotations.exists(_.tpe <:< typeOf[scala.macros.socrates])
-      if (!isSocratesMacro) None
-      else {
-        val standardArgs = standardMacroArgs(typer, expandee)
-        val prefix = new treeInfo.Applied(expandee).core match {
-          case Select(qual, _) => qual
-          case _ => EmptyTree
-        }
-        val socratesContext = expandee.attachments
-          .get[MacroRuntimeAttachment]
-          .flatMap(_.macroContext)
-          .getOrElse(mkSocratesContext(typer, prefix, expandee))
-        scala.macros.universeStore.set(ScalacUniverse(socratesContext))
-        val socratesArgs = standardArgs.copy(c = socratesContext)
-        Some(socratesArgs)
-      }
+      if (!isSocratesMacro(expandee.symbol.annotations)) None
+      else Some(socratesMacroArgs(typer, expandee))
     }
 
     override def pluginsTypedMacroBody(typer: Typer, ddef: DefDef): Option[Tree] = {
-      val untypedMacroImplRef = ddef.rhs.duplicate
       val isSocratesMacro = ddef.mods.annotations.exists { annot =>
-        typer.typed(annot).tpe <:< typeOf[scala.macros.socrates]
+        if (annot.tpe == null) {
+          // Untyped tree of the annotation
+          typer.typed(annot).tpe <:< typeOf[scala.macros.socrates]
+        } else {
+          false
+        }
       }
       if (!isSocratesMacro) None
-      else {
-        val macroDef = ddef.symbol
-        def fail() = {
-          if (macroDef != null) macroDef setFlag Flags.IS_ERROR
-          ddef setType ErrorType; EmptyTree
-        }
-        def success(macroImplRef: Tree) = {
-          // +scalac deviation
-          val pickle = socratesMacro.pickle(macroImplRef) // custom socrates pickle.
-          // -scalac deviation
-          val annotInfo = AnnotationInfo(definitions.MacroImplAnnotation.tpe, List(pickle), Nil)
-          macroDef withAnnotation annotInfo
-          macroImplRef
-        }
-        val macroDdef1: ddef.type = ddef
-        val typer1: typer.type = typer
-        val macroCompiler = new {
-          val global: self.global.type = self.global
-          val typer: self.global.analyzer.Typer =
-            typer1.asInstanceOf[self.global.analyzer.Typer]
-          val macroDdef: self.global.DefDef = macroDdef1
-        } with DefaultMacroCompiler {
-          override def resolveMacroImpl: global.Tree = {
-            def tryCompile(compiler: MacroImplRefCompiler): scala.util.Try[Tree] = {
-              try {
-                // +scalac deviation
-                // TODO(olafur) implement validation on socrates macros.
-                /* compiler.validateMacroImplRef(); // skip validation */
-                // -scalac deviation
-                scala.util.Success(compiler.macroImplRef)
-              } catch {
-                // +scalac deviation
-                case PrivateMacroImplException(ex) =>
-                  // -scalac deviation
-                  scala.util.Failure(ex)
-              }
-            }
-            val vanillaImplRef =
-              MacroImplRefCompiler(macroDdef.rhs.duplicate, isImplBundle = false)
-            val vanillaResult = tryCompile(vanillaImplRef)
-            try {
-              vanillaResult.get
-            } catch {
-              // +scalac deviation
-              case PrivateMacroImplException(e) =>
-                context.error(macroDdef1.pos, e.toString)
-                EmptyTree
-              // -scalac deviation
-            }
-          }
-        }
-        val macroImplRef = macroCompiler.resolveMacroImpl
-        if (macroImplRef.isEmpty) fail() else success(macroImplRef)
-        val typed = typer.silent(
-          _.typed(markMacroImplRef(untypedMacroImplRef)),
-          reportAmbiguousErrors = false
-        )
-        typed match {
-          case SilentResultValue(macroImplRef @ SocratesShape()) =>
-            Some(macroImplRef)
-          case SilentResultValue(macroError) =>
-            reporter.error(macroError.pos, showCode(macroError, printTypes = true))
-            None
-          case SilentTypeError(err) =>
-            reporter.error(err.errPos, err.errMsg)
-            None
-        }
-      }
+      else socratesTypedMacroBody(typer, ddef)
     }
 
     // =============
@@ -153,6 +82,78 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
     // ================
     // Macro Typed Body
     // ================
+
+    // Copy-paste of standardTypedMacroBody and adapted to support socrates macros.
+    def socratesTypedMacroBody(typer: Typer, ddef: DefDef): Option[Tree] = {
+      val macroDef = ddef.symbol
+      def fail() = {
+        if (macroDef != null) macroDef setFlag Flags.IS_ERROR
+        ddef setType ErrorType; EmptyTree
+      }
+      def success(macroImplRef: Tree) = {
+        // +scalac deviation
+        val pickle = socratesMacro.pickle(macroImplRef) // custom socrates pickle.
+        // -scalac deviation
+        val annotInfo = AnnotationInfo(definitions.MacroImplAnnotation.tpe, List(pickle), Nil)
+        macroDef withAnnotation annotInfo
+        macroImplRef
+      }
+      val macroDdef1: ddef.type = ddef
+      val typer1: typer.type = typer
+      val macroCompiler = new {
+        val global: self.global.type = self.global
+        val typer: self.global.analyzer.Typer =
+          typer1.asInstanceOf[self.global.analyzer.Typer]
+        val macroDdef: self.global.DefDef = macroDdef1
+      } with DefaultMacroCompiler {
+        override def resolveMacroImpl: global.Tree = {
+          def tryCompile(compiler: MacroImplRefCompiler): scala.util.Try[Tree] = {
+            try {
+              // +scalac deviation
+              // TODO(olafur) implement validation on socrates macros.
+              /* compiler.validateMacroImplRef(); // skip validation */
+              // -scalac deviation
+              scala.util.Success(compiler.macroImplRef)
+            } catch {
+              // +scalac deviation
+              case PrivateMacroImplException(ex) =>
+                // -scalac deviation
+                scala.util.Failure(ex)
+            }
+          }
+          val vanillaImplRef =
+            MacroImplRefCompiler(macroDdef.rhs.duplicate, isImplBundle = false)
+          val vanillaResult = tryCompile(vanillaImplRef)
+          try {
+            vanillaResult.get
+          } catch {
+            // +scalac deviation
+            case PrivateMacroImplException(e) =>
+              context.error(macroDdef1.pos, e.toString)
+              EmptyTree
+            // -scalac deviation
+          }
+        }
+      }
+      val macroImplRef = macroCompiler.resolveMacroImpl
+      if (macroImplRef.isEmpty) fail() else success(macroImplRef)
+      val untypedMacroImplRef = ddef.rhs.duplicate
+      val typed = typer.silent(
+        _.typed(markMacroImplRef(untypedMacroImplRef)),
+        reportAmbiguousErrors = false
+      )
+      typed match {
+        case SilentResultValue(macroImplRef @ SocratesShape()) =>
+          Some(macroImplRef)
+        case SilentResultValue(macroError) =>
+          reporter.error(macroError.pos, showCode(macroError, printTypes = true))
+          None
+        case SilentTypeError(err) =>
+          reporter.error(err.errPos, err.errMsg)
+          None
+      }
+
+    }
 
     object PrivateMacroImplException {
       def unapply(ex: Exception): Option[Exception] = {
@@ -321,6 +322,25 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
     // ==========
     // Macro Args
     // ==========
+
+    // Copy-paste of standardMacroArgs and adapted to support socrates macros.
+    def socratesMacroArgs(
+        typer: global.analyzer.Typer,
+        expandee: global.analyzer.global.Tree
+    ): global.analyzer.MacroArgs = {
+      val standardArgs = standardMacroArgs(typer, expandee)
+      val prefix = new treeInfo.Applied(expandee).core match {
+        case Select(qual, _) => qual
+        case _ => EmptyTree
+      }
+      val socratesContext = expandee.attachments
+        .get[MacroRuntimeAttachment]
+        .flatMap(_.macroContext)
+        .getOrElse(mkSocratesContext(typer, prefix, expandee))
+      scala.macros.universeStore.set(ScalacUniverse(socratesContext))
+      val socratesArgs = standardArgs.copy(c = socratesContext)
+      socratesArgs
+    }
 
     def mkSocratesContext(typer: Typer, prefixTree: Tree, expandeeTree: Tree): MacroContext = {
       new {
