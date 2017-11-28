@@ -64,8 +64,7 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
 
     object SocratesTypeTag {
       val socratesTypeTag: Symbol =
-        rootMirror.getPackageObject("scala.macros").info.member(TypeName("TypeTag"))
-//          [scala.macros.TypeTag[_]].typeSymbol // rootMirror.getClassIfDefined("scala.macros.pa")
+        rootMirror.getPackageObject("scala.macros").info.member(TypeName("WeakTypeTag"))
     }
 
     object SocratesTreeType {

@@ -142,9 +142,10 @@ package object macros {
     }
   }
 
-  type TypeTag[T]
-  implicit class XtensionTypeTag(val typeTag: TypeTag[_]) extends AnyVal {
-    def tpe: Type = !universe.typeTagType(!typeTag)
+  type WeakTypeTag[T]
+  def weakTypeTag[T](implicit ev: WeakTypeTag[T]): WeakTypeTag[T] = ev
+  implicit class XtensionTypeTag[T](val typeTag: WeakTypeTag[T]) extends AnyVal {
+    def tpe: Type = !universe.weakTypeTagType(!typeTag)
   }
   type Type
   object Type {

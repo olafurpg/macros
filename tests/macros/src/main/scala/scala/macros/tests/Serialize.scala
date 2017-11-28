@@ -17,8 +17,8 @@ object Serialize {
 
   @macros.v3
   def materialize[T]: Serialize[T] = macro impl[T]
-  def impl[T](c: Expansion)(implicit ev: TypeTag[T]): Term = {
-    val T = ev.tpe
+  def impl[T: WeakTypeTag](c: Expansion): Term = {
+    val T = weakTypeTag[T].tpe
     val instance = Term.fresh("instance")
     val param = Term.fresh("x")
     val buf = Term.fresh("buf")
