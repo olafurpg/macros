@@ -31,7 +31,7 @@ package object macros {
     def sym: Symbol = !universe.denotSym(!denot)
   }
   type Mirror
-  type Expansion
+  trait Expansion
   implicit class XtensionExpansion(val expansion: Expansion) extends AnyVal {
     def enclosingOwner: Symbol = !universe.enclosingOwner
     def enclosingPosition: Position = !universe.enclosingPosition

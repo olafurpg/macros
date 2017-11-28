@@ -1,6 +1,62 @@
 package scala.macros.internal.plugins.scalac.reflect
 
+import scala.macros.internal.engines.scalac.ScalacUniverse
 import scala.tools.nsc.typechecker.Fingerprint
+
+trait MacroArgs_v3 { self: ReflectToolkit_v3 =>
+  import global._
+  def mkMacroContext_v3(
+      typer: analyzer.Typer,
+      prefixTree: Tree,
+      expandeeTree: Tree
+  ): analyzer.MacroContext = {
+    println("=> mkMacroContext")
+    new {
+      val universe: self.global.type = self.global
+      val callsiteTyper: universe.analyzer.Typer =
+        typer.asInstanceOf[global.analyzer.Typer]
+      val expandee = universe.analyzer
+        .macroExpanderAttachment(expandeeTree)
+        .original orElse duplicateAndKeepPositions(expandeeTree)
+    } with analyzer.UnaffiliatedMacroContext with scala.macros.Expansion {
+      val prefix = Expr[Nothing](prefixTree)(TypeTag.Nothing)
+      override def toString: String =
+        "MacroContext(%s@%s +%d)".format(
+          expandee.symbol.name,
+          expandee.pos,
+          enclosingMacros.length - 1 /* exclude myself */
+        )
+    }
+  }
+
+  def macroArgs_v3(
+      typer: analyzer.Typer,
+      expandee: analyzer.global.Tree,
+      standardArgs: analyzer.MacroArgs,
+      binding: analyzer.MacroImplBinding
+  ): Option[global.analyzer.MacroArgs] = {
+    val signature = binding.signature.tail
+    println("ARGS " + standardArgs)
+    val treeInfo.Applied(core, targs, argss) = expandee
+    val prefix = core match {
+      case Select(qual, _) => qual;
+      case _ => EmptyTree
+    }
+    val socratesContext = expandee.attachments
+      .get[analyzer.MacroRuntimeAttachment]
+      .flatMap(_.macroContext)
+      .getOrElse(mkMacroContext_v3(typer, prefix, expandee))
+    println(s"SIGNATURE $signature")
+    val universe_v3 = ScalacUniverse(socratesContext)
+    scala.macros.universeStore.set(universe_v3)
+    val args = standardArgs.copy(c = socratesContext)
+    println("CTX " + socratesContext)
+    println("ARGS S " + standardArgs.others)
+    println("CTX " + args.others)
+    Some(args)
+  }
+
+}
 
 trait MacroPickle_v3 { self: ReflectToolkit_v3 =>
   import global._

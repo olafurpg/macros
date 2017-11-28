@@ -9,6 +9,7 @@ trait ReflectToolkit_v3
     extends AnalyzerPlugins_v3
     with Definitions_v3
     with TypedMacroBody_v3
+    with MacroArgs_v3
     with MacroPickle_v3 {
   val global: Global
 }

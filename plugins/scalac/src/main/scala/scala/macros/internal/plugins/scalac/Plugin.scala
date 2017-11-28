@@ -10,5 +10,5 @@ class Plugin(val global: Global) extends NscPlugin with ReflectToolkit_v3 with A
   val name = "scalamacros-plugins-scalac"
   val description = "Implementation of new-style Scala macros for scalac"
   val components = Nil
-  global.analyzer.addMacroPlugin(MacroPlugin)
+  global.analyzer.addMacroPlugin(MacroPlugin_v3)
 }

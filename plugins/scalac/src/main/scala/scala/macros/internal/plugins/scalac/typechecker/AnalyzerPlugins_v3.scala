@@ -12,7 +12,7 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
   import global._
   import analyzer.{MacroPlugin => _, _}
 
-  object MacroPlugin extends analyzer.MacroPlugin {
+  object MacroPlugin_v3 extends analyzer.MacroPlugin {
     private lazy val pluginMacroClassloader: ClassLoader = {
       val classpath = global.classPath.asURLs
       macroLogVerbose("macro classloader: initializing from -cp: %s".format(classpath))
@@ -43,8 +43,20 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
       println("=> pluginsTypedMacroBody")
       if (!isDefMacro_v3(ddef)) None
       else {
-        println("TYPING")
         new TypedMacroBodyImpl(typer, ddef).run()
+      }
+    }
+    override def pluginsMacroArgs(
+        typer: global.analyzer.Typer,
+        expandee: global.analyzer.global.Tree
+    ): Option[global.analyzer.MacroArgs] = {
+      println("=> pluginsMacroArgs")
+      if (!isDefMacro_v3(expandee)) None
+      else {
+        val macroDef = expandee.symbol
+        val standardArgs = standardMacroArgs(typer, expandee)
+        val binding = loadMacroImplBinding(macroDef).get
+        macroArgs_v3(typer, expandee, standardArgs, binding)
       }
     }
   }

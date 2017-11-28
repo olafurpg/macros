@@ -6,6 +6,10 @@ trait Definitions_v3 {
 
   def macroEngine = "v3.0"
 
+  def isDefMacro_v3(expandee: Tree): Boolean = {
+    expandee.symbol.annotations.exists(_.tpe <:< typeOf[scala.macros.v3])
+  }
+
   def isDefMacro_v3(ddef: DefDef): Boolean = {
     ddef.mods.annotations.exists { annot =>
       typer.typed(annot).tpe <:< typeOf[scala.macros.v3]
