@@ -1,23 +1,26 @@
-package scala.macros.internal
-package plugins.scalac
+package scala.macros.internal.plugins.socrates
 
 import scala.macros.internal.engines.scalac.ScalacUniverse
-import scala.tools.nsc.Global
-import scala.tools.nsc.plugins.Plugin
 import scala.reflect.internal.Flags
 import scala.reflect.internal.util.ScalaClassLoader
 import scala.reflect.macros.compiler.DefaultMacroCompiler
+import scala.tools.nsc.Global
+import scala.tools.nsc.plugins.Plugin
 import scala.tools.nsc.typechecker.Fingerprint
 import scala.util.control.NonFatal
 
-class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
-  val name = "scalamacros-plugins-scalac"
-  val description = "Implementation of new-style Scala macros for scalac"
+// Using "Socrates" as a dummy codename to avoid tricky name conflicts
+// inside scalac global._
+class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
+  val name = "socrates"
+  val description = "Implementation of new-style def macros for scalac"
   val components = Nil
   import global._
   import analyzer._
 
-  object MacroPlugin_v3 extends analyzer.MacroPlugin { macroPlugin =>
+  global.analyzer.addMacroPlugin(SocratesMacroPlugin)
+
+  object SocratesMacroPlugin extends analyzer.MacroPlugin { socratesMacro =>
     private lazy val pluginMacroClassloader: ClassLoader = {
       val classpath = global.classPath.asURLs
       macroLogVerbose("macro classloader: initializing from -cp: %s".format(classpath))
@@ -28,19 +31,18 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
       override def resolveJavaReflectionRuntime(defaultClassLoader: ClassLoader): MacroRuntime = {
         // NOTE: defaultClassLoader only includes libraryClasspath + toolClasspath.
         // We need to include pluginClasspath, so that the new macro shim can instantiate
-        // ScalacUniverse and ScalacExpansion.
+        // ScalacUniverse and ScalacContext.
         super.resolveJavaReflectionRuntime(pluginMacroClassloader)
       }
     }
+
     private val newMacroRuntimesCache =
       perRunCaches.newWeakMap[Symbol, MacroRuntime]
+
     override def pluginsMacroRuntime(
         expandee: global.analyzer.global.Tree
     ): Option[global.analyzer.MacroRuntime] = {
-      println("=> pluginsMacroRuntime")
       macroLogVerbose(s"looking for macro implementation: ${expandee.symbol}")
-      println(expandee.symbol)
-      println(expandee.symbol.fullName)
       def mkResolver =
         new PluginRuntimeResolver(expandee.symbol).resolveRuntime()
       Some(newMacroRuntimesCache.getOrElseUpdate(expandee.symbol, mkResolver))
@@ -62,20 +64,18 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
     }
 
     object SocratesTypeTag {
-      val socratesTypeTag: Symbol =
+      private val socratesTypeTag: Symbol =
         rootMirror.getPackageObject("scala.macros").info.member(TypeName("WeakTypeTag"))
+      def unapply(symbol: Symbol): Boolean = symbol == socratesTypeTag
+
     }
 
-    object SocratesTreeType {
-      lazy val socratesTerm = typeOf[scala.macros.tpd.Term]
-      def unapply(arg: Type): Boolean = {
-        println(s"TPE: $arg <:< ${arg.<:<(socratesTerm)}")
-        arg <:< socratesTerm
-      }
+    object SocratesTypedTree {
+      private val socratesTypedTree = typeOf[scala.macros.tpd.Term]
+      def unapply(arg: Type): Boolean = arg <:< socratesTypedTree
     }
 
     def isSocratesContext(tp: Type): Boolean = {
-      println(s"TPTPTP: $tp")
       tp <:< typeOf[scala.macros.Expansion]
     }
 
@@ -102,7 +102,6 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
           NoSymbol // no context parameter in the signature => nothing to do
       }
       def transformTag(param: Symbol): Symbol = {
-        println("PARAM: " + param.tpe.dealias)
         param.tpe.dealias match {
           case TypeRef(
               SingleType(SingleType(_, ContextParam), MacroContextUniverse),
@@ -111,7 +110,7 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
               ) =>
             transform(param, targ.typeSymbol)
           // +scalac deviation
-          case TypeRef(_, SocratesTypeTag.socratesTypeTag, targ :: Nil) =>
+          case TypeRef(_, SocratesTypeTag(), targ :: Nil) =>
             transform(param, targ.typeSymbol)
           // -scalac deviation
           case _ => param
@@ -146,8 +145,8 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
 
         loop(owner)
       }
-      import definitions.RepeatedParamClass
       import scala.tools.nsc.typechecker.Fingerprint._
+      import definitions.RepeatedParamClass
 
       def signature: List[List[Fingerprint]] = {
         def fingerprint(tpe: Type): Fingerprint = {
@@ -157,7 +156,7 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
             case ExprClassOf(_) => LiftedTyped
             case TreeType() => LiftedUntyped
             // +scalac deviation
-            case SocratesTreeType() => LiftedUntyped
+            case SocratesTypedTree() => LiftedUntyped
             // -scalac deviation
             case _ => Other
           }
@@ -168,8 +167,9 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
         mmap(transformed)(p => if (p.isTerm) fingerprint(p.info) else Tagged(p.paramPos))
       }
 
-      println(s"SIGNATURE: $signature")
       val payload = List[(String, Any)](
+        // TODO(olafur) attach new macro engine ID while avoiding:
+        // > macro cannot be expanded, because it was compiled by an incompatible macro engine
         "macroEngine" -> macroEngine,
         "isBundle" -> isBundle,
         "isBlackbox" -> isBlackbox,
@@ -195,7 +195,7 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
       // if you don't assign a ConstantType to a constant
       // then pickling will crash
       new Transformer {
-        override def transform(tree: Tree) = {
+        override def transform(tree: Tree): Tree = {
           tree match {
             case Literal(const @ Constant(x)) if tree.tpe == null =>
               tree setType ConstantType(const)
@@ -208,11 +208,7 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
     }
 
     private case class MacroImplResolutionException(pos: Position, msg: String) extends Exception
-    override def pluginsTypedMacroBody(
-        typer: global.analyzer.Typer,
-        ddef: global.analyzer.global.DefDef
-    ): Option[global.analyzer.global.Tree] = {
-      println("=> pluginsTypedMacroBody")
+    override def pluginsTypedMacroBody(typer: Typer, ddef: DefDef): Option[Tree] = {
       val untypedMacroImplRef = ddef.rhs.duplicate
       val isSocratesMacro = ddef.mods.annotations.exists { annot =>
         typer.typed(annot).tpe <:< typeOf[scala.macros.v3]
@@ -226,11 +222,10 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
         }
         def success(macroImplRef: Tree) = {
           // +scalac deviation
-          val pickle = macroPlugin.pickle(macroImplRef) // custom socrates pickle.
+          val pickle = socratesMacro.pickle(macroImplRef) // custom socrates pickle.
           // -scalac deviation
           val annotInfo = AnnotationInfo(definitions.MacroImplAnnotation.tpe, List(pickle), Nil)
           macroDef withAnnotation annotInfo
-          println(s"INFO: $annotInfo")
           macroImplRef
         }
         val macroDdef1: ddef.type = ddef
@@ -244,9 +239,8 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
           override def resolveMacroImpl: global.Tree = {
             def tryCompile(compiler: MacroImplRefCompiler): scala.util.Try[Tree] = {
               try {
-                println("Trying compile!")
                 // +scalac deviation
-                /* compiler.validateMacroImplRef(); skip validation */
+                /* compiler.validateMacroImplRef(); // skip validation */
                 // -scalac deviation
                 scala.util.Success(compiler.macroImplRef)
               } catch {
@@ -254,7 +248,6 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
                   scala.util.Failure(ex)
               }
             }
-            println("resolving... ")
             val vanillaImplRef =
               MacroImplRefCompiler(macroDdef.rhs.duplicate, isImplBundle = false)
             val vanillaResult = tryCompile(vanillaImplRef)
@@ -276,8 +269,8 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
         typed match {
           case SilentResultValue(macroImplRef @ SocratesShape()) =>
             Some(macroImplRef)
-          case SilentResultValue(macroImplRef) =>
-            reporter.error(macroImplRef.pos, showCode(macroImplRef, printTypes = true))
+          case SilentResultValue(macroError) =>
+            reporter.error(macroError.pos, showCode(macroError, printTypes = true))
             None
           case SilentTypeError(err) =>
             reporter.error(err.errPos, err.errMsg)
@@ -286,15 +279,15 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
       }
     }
 
-    def mkMacroContext(typer: Typer, prefixTree: Tree, expandeeTree: Tree): MacroContext = {
-      println("=> mkMacroContext")
+    def mkSocratesContext(typer: Typer, prefixTree: Tree, expandeeTree: Tree): MacroContext = {
       new {
         val universe: self.global.type = self.global
         val callsiteTyper: universe.analyzer.Typer =
           typer.asInstanceOf[global.analyzer.Typer]
         val expandee = universe.analyzer
           .macroExpanderAttachment(expandeeTree)
-          .original orElse duplicateAndKeepPositions(expandeeTree)
+          .original
+          .orElse(duplicateAndKeepPositions(expandeeTree))
       } with UnaffiliatedMacroContext with scala.macros.Expansion {
         val prefix = Expr[Nothing](prefixTree)(TypeTag.Nothing)
         override def toString: String =
@@ -310,33 +303,23 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
         typer: global.analyzer.Typer,
         expandee: global.analyzer.global.Tree
     ): Option[global.analyzer.MacroArgs] = {
-      println("=> pluginsMacroArgs")
       val isSocratesMacro =
         expandee.symbol.annotations.exists(_.tpe <:< typeOf[scala.macros.v3])
       if (!isSocratesMacro) None
       else {
         val standardArgs = standardMacroArgs(typer, expandee)
-        val macroDef = expandee.symbol
-        val binding = loadMacroImplBinding(macroDef).get
-        val signature = binding.signature.tail
-        println("ARGS " + standardArgs)
-        val treeInfo.Applied(core, targs, argss) = expandee
-        val prefix = core match {
-          case Select(qual, _) => qual; case _ => EmptyTree
+        val prefix = new treeInfo.Applied(expandee).core match {
+          case Select(qual, _) => qual
+          case _ => EmptyTree
         }
         val socratesContext = expandee.attachments
           .get[MacroRuntimeAttachment]
           .flatMap(_.macroContext)
-          .getOrElse(mkMacroContext(typer, prefix, expandee))
-        println(s"SIGNATURE $signature")
+          .getOrElse(mkSocratesContext(typer, prefix, expandee))
         scala.macros.universeStore.set(ScalacUniverse(socratesContext))
-        val args = standardArgs.copy(c = socratesContext)
-        println("CTX " + socratesContext)
-        println("ARGS S " + standardArgs.others)
-        println("CTX " + args.others)
-        Some(args)
+        val socratesArgs = standardArgs.copy(c = socratesContext)
+        Some(socratesArgs)
       }
     }
   }
-  global.analyzer.addMacroPlugin(MacroPlugin_v3)
 }
