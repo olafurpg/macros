@@ -25,7 +25,7 @@ object SourceCodeUtil {
 
 case class File(value: String)
 object File {
-  @scala.macros.v3
+  @scala.macros.socrates
   implicit def generate: File = macro impl
   def impl(c: Expansion): Term = {
     val path = c.enclosingPosition.input.path.toAbsolutePath.toString
@@ -35,7 +35,7 @@ object File {
 
 case class Line(value: Int)
 object Line {
-  @scala.macros.v3
+  @scala.macros.socrates
   implicit def generate: Line = macro impl
   def impl(c: Expansion): Term = {
     SourceCodeUtil.prefix("Line").apply(Lit.Int(c.enclosingPosition.line) :: Nil)
@@ -44,7 +44,7 @@ object Line {
 
 case class Name(value: String)
 object Name {
-  @scala.macros.v3
+  @scala.macros.socrates
   implicit def generate: Name = macro impl
   def impl(c: Expansion): Term = {
     def loop(s: Symbol): Symbol =
@@ -57,7 +57,7 @@ object Name {
 
 case class FullName(value: String)
 object FullName {
-  @scala.macros.v3
+  @scala.macros.socrates
   implicit def generate: FullName = macro impl
   def impl(c: Expansion): Term = {
     def loop(sym: Symbol): Vector[Symbol] = {
@@ -74,7 +74,7 @@ object FullName {
 
 case class Text[T](source: String, value: T)
 object Text {
-  @scala.macros.v3
+  @scala.macros.socrates
   implicit def generate[T](e: T): Text[T] = macro impl
   def impl(c: Expansion)(e: tpd.Term): Term = {
     // NOTE(olafur): lihaoyi/sourcecode uses unit parser and slices

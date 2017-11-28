@@ -15,7 +15,7 @@ object Serialize {
     "\"" + x + "\""
   }
 
-  @macros.v3
+  @macros.socrates
   def materialize[T]: Serialize[T] = macro impl[T]
   def impl[T: WeakTypeTag](c: Expansion): Term = {
     val T = weakTypeTag[T].tpe
