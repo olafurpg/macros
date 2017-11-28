@@ -2,15 +2,13 @@ package scala.macros.internal
 package plugins.scalac
 package typechecker
 
-import scala.reflect.internal.util.ScalaClassLoader
-import scala.macros.internal.config.{engineVersion => foundEngineVersion}
 import scala.macros.internal.plugins.scalac.reflect.ReflectToolkit_v3
-import scala.macros.config.{coreVersion => foundCoreVersion}
-import scala.macros.config.Version
+import scala.reflect.internal.util.ScalaClassLoader
 
 trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
   import global._
-  import analyzer.{MacroPlugin => _, _}
+  import analyzer.{MacroPlugin => _}
+  import analyzer._
 
   object MacroPlugin_v3 extends analyzer.MacroPlugin {
     private lazy val pluginMacroClassloader: ClassLoader = {
@@ -30,27 +28,27 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
 
     private val newMacroRuntimesCache = perRunCaches.newWeakMap[Symbol, MacroRuntime]
     override def pluginsMacroRuntime(expandee: Tree): Option[MacroRuntime] = {
-      // TODO(olafur) skip old macros
-      macroLogVerbose(s"looking for macro implementation: ${expandee.symbol}")
+      println(s"=> pluginsMacroRuntime $expandee")
       def mkResolver = new PluginRuntimeResolver(expandee.symbol).resolveRuntime()
       Some(newMacroRuntimesCache.getOrElseUpdate(expandee.symbol, mkResolver))
     }
 
     override def pluginsTypedMacroBody(
-        typer: global.analyzer.Typer,
-        ddef: global.analyzer.global.DefDef
-    ): Option[global.analyzer.global.Tree] = {
-      println("=> pluginsTypedMacroBody")
+        typer: Typer,
+        ddef: DefDef
+    ): Option[Tree] = {
+      println(s"=> pluginsTypedMacroBody $ddef")
       if (!isDefMacro_v3(ddef)) None
       else {
         new TypedMacroBodyImpl(typer, ddef).run()
       }
     }
+
     override def pluginsMacroArgs(
-        typer: global.analyzer.Typer,
-        expandee: global.analyzer.global.Tree
+        typer: Typer,
+        expandee: Tree
     ): Option[global.analyzer.MacroArgs] = {
-      println("=> pluginsMacroArgs")
+      println(s"=> pluginsMacroArgs ${isDefMacro_v3(expandee)}")
       if (!isDefMacro_v3(expandee)) None
       else {
         val macroDef = expandee.symbol
