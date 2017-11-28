@@ -55,7 +55,6 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
 
       def unapply(tree: Tree): Boolean = refPart(tree) match {
         case ref: RefTree =>
-          //          val qual = ref.qualifier
           // TODO(olafur) validate shape is:
           // (arg1: tpd.Term, arg2: tpd.Term)(implicit c: socrates.Context): Term
           true
