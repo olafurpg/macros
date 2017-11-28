@@ -1,20 +1,22 @@
 package scala.macros.internal
 package plugins.scalac
-package typechecker
-
-import scala.language.reflectiveCalls
 
 import scala.macros.internal.engines.scalac.ScalacUniverse
-import scala.reflect.macros.compiler.DefaultMacroCompiler
 import scala.macros.internal.plugins.scalac.reflect.ReflectToolkit_v3
+import scala.tools.nsc.Global
+import scala.tools.nsc.plugins.Plugin
+import scala.macros.internal.plugins.scalac.typechecker.AnalyzerPlugins_v3
 import scala.reflect.internal.Flags
 import scala.reflect.internal.util.ScalaClassLoader
+import scala.reflect.macros.compiler.DefaultMacroCompiler
 import scala.tools.nsc.typechecker.Fingerprint
 import scala.util.control.NonFatal
 
-trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
+class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
+  val name = "scalamacros-plugins-scalac"
+  val description = "Implementation of new-style Scala macros for scalac"
+  val components = Nil
   import global._
-  import analyzer.{MacroPlugin => _}
   import analyzer._
 
   object MacroPlugin_v3 extends analyzer.MacroPlugin { macroPlugin =>
@@ -55,7 +57,7 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
 
       def unapply(tree: Tree): Boolean = refPart(tree) match {
         case ref: RefTree =>
-//          val qual = ref.qualifier
+          //          val qual = ref.qualifier
           // TODO(olafur) validate shape is:
           // (arg1: tpd.Term, arg2: tpd.Term)(implicit c: socrates.Context): Term
           true
@@ -147,7 +149,7 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
         loop(owner)
       }
       import definitions.RepeatedParamClass
-      import Fingerprint._
+      import scala.tools.nsc.typechecker.Fingerprint._
 
       def signature: List[List[Fingerprint]] = {
         def fingerprint(tpe: Type): Fingerprint = {
@@ -338,4 +340,5 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
       }
     }
   }
+  global.analyzer.addMacroPlugin(MacroPlugin_v3)
 }
