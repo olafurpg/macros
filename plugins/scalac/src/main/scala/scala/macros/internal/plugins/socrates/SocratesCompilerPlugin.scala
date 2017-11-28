@@ -191,7 +191,9 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
       tp <:< typeOf[scala.macros.Expansion]
     }
 
-    def transformSocratesTypeTagEvidenceParams(
+    // Copy-paste of scala.reflect.macros.util.Helpers.transformTypeTagEvidenceParams
+    // and adapted to socrates macros.
+    def socratesTransformTypeTagEvidenceParams(
         macroImplRef: Tree,
         transform: (Symbol, Symbol) => Symbol
     ): List[List[Symbol]] = {
@@ -238,6 +240,7 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
       }
     }
 
+    // Copy-paste of MacroImplBinding.pickle and adapted to socrates macros.
     def pickle(macroImplRef: Tree): Tree = {
       val runDefinitions = currentRun.runDefinitions
       import runDefinitions._
@@ -275,7 +278,7 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
         }
 
         val transformed =
-          transformSocratesTypeTagEvidenceParams(macroImplRef, (param, tparam) => tparam)
+          socratesTransformTypeTagEvidenceParams(macroImplRef, (param, tparam) => tparam)
         mmap(transformed)(p => if (p.isTerm) fingerprint(p.info) else Tagged(p.paramPos))
       }
 
