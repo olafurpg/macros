@@ -43,7 +43,8 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
       println("=> pluginsTypedMacroBody")
       if (!isDefMacro_v3(ddef)) None
       else {
-        None
+        println("TYPING")
+        new TypedMacroBodyImpl(typer, ddef).run()
       }
     }
   }

@@ -8,7 +8,6 @@ trait MacroPickle_v3 { self: ReflectToolkit_v3 =>
   import analyzer.MacroImplBinding
 
   case class MacroImplResolutionException(pos: Position, msg: String) extends Exception
-  lazy val MacroTypeTag_v3: global.Symbol = typeOf[scala.macros.TypeTag[_]].typeSymbol
   object DefMacro_v3 {
     private def refPart(tree: Tree): Tree = tree match {
       case TypeApply(fun, _) => refPart(fun)
@@ -48,6 +47,7 @@ trait MacroPickle_v3 { self: ReflectToolkit_v3 =>
       case _ =>
         NoSymbol // no context parameter in the signature => nothing to do
     }
+    val MacroTypeTag_v3 = rootMirror.getClassIfDefined("scala.macros.TypeTag")
     def transformTag(param: Symbol): Symbol = {
       param.tpe.dealias match {
         case TypeRef(
