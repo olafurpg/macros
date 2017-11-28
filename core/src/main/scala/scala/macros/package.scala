@@ -142,7 +142,10 @@ package object macros {
     }
   }
 
-  case class TypeTag[T](tpe: Type)
+  type TypeTag[T]
+  implicit class XtensionTypeTag(val typeTag: TypeTag[_]) extends AnyVal {
+    def tpe: Type = !universe.typeTagType(!typeTag)
+  }
   type Type
   object Type {
     type TypeRef <: Type

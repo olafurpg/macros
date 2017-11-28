@@ -2,10 +2,8 @@ package scala.macros.internal
 package plugins.scalac
 
 import scala.macros.internal.engines.scalac.ScalacUniverse
-import scala.macros.internal.plugins.scalac.reflect.ReflectToolkit_v3
 import scala.tools.nsc.Global
 import scala.tools.nsc.plugins.Plugin
-import scala.macros.internal.plugins.scalac.typechecker.AnalyzerPlugins_v3
 import scala.reflect.internal.Flags
 import scala.reflect.internal.util.ScalaClassLoader
 import scala.reflect.macros.compiler.DefaultMacroCompiler
@@ -65,7 +63,9 @@ class MacrosPlugin_v3(val global: Global) extends Plugin { self =>
     }
 
     object SocratesTypeTag {
-      val socratesTypeTag = rootMirror.getClassIfDefined("scala.macros.TypeTag")
+      val socratesTypeTag: Symbol =
+        rootMirror.getPackageObject("scala.macros").info.member(TypeName("TypeTag"))
+//          [scala.macros.TypeTag[_]].typeSymbol // rootMirror.getClassIfDefined("scala.macros.pa")
     }
 
     object SocratesTreeType {

@@ -23,7 +23,8 @@ trait Universe extends UntypedTrees with TypedTrees {
   def appliedType(tp: Type, args: List[Type]): Type
   def typeTreeOf(tp: Type): TypeTree
 
-  class TypeType[T](val tpe: Type)
+  type TypeTag[T]
+  def typeTagType[T](tt: TypeTag[T]): Type
 
   def enclosingPosition: Position
   def enclosingOwner: Symbol
