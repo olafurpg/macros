@@ -45,17 +45,25 @@ trait AnalyzerPlugins_v3 { self: ReflectToolkit_v3 =>
     }
 
     override def pluginsMacroArgs(
-        typer: Typer,
-        expandee: Tree
+        typer: global.analyzer.Typer,
+        expandee: global.analyzer.global.Tree
     ): Option[global.analyzer.MacroArgs] = {
       println(s"=> pluginsMacroArgs ${isDefMacro_v3(expandee)}")
-      if (!isDefMacro_v3(expandee)) None
-      else {
-        val macroDef = expandee.symbol
-        val standardArgs = standardMacroArgs(typer, expandee)
-        val binding = loadMacroImplBinding(macroDef).get
-        macroArgs_v3(typer, expandee, standardArgs, binding)
-      }
+      None
     }
+
+//    override def pluginsMacroArgs(
+//        typer: Typer,
+//        expandee: Tree
+//    ): Option[global.analyzer.MacroArgs] = {
+//      println(s"=> pluginsMacroArgs ${isDefMacro_v3(expandee)}")
+//      if (!isDefMacro_v3(expandee)) None
+//      else {
+//        val macroDef = expandee.symbol
+//        val standardArgs = standardMacroArgs(typer, expandee)
+//        val binding = loadMacroImplBinding(macroDef).get
+//        macroArgs_v3(typer, expandee, standardArgs, binding)
+//      }
+//    }
   }
 }
