@@ -7,10 +7,23 @@ import scala.reflect.macros.compiler.DefaultMacroCompiler
 import scala.tools.nsc.Global
 import scala.tools.nsc.plugins.Plugin
 import scala.tools.nsc.typechecker.Fingerprint
-import scala.util.control.NonFatal
 
-// Using "Socrates" as a dummy codename to avoid tricky name conflicts
-// inside scalac global._
+// "Socrates" is a dummy codename to avoid name conflicts inside scalac global._
+
+// Most of the code in this plugin is copy-pasted from scala-compiler and adapted
+// to support a custom Context (other than blackbox.Context) and different
+// types for trees and type tags.
+// Example support macro signature:
+//
+// def foo[T](e: T) = macro impl
+// def impl[T:WeakTypeTag](c: Expansion)(e: tpd.Term): Term
+//
+// Note. The runtime values of `Expansion` is a subtype of blackbox.Context
+// runtime values of `tpd.Term` and `Term` are universe.Tree.
+// The main motivation for having different types for the same runtime values
+// is portability. Expansion/tpd.Term/Term are abstract types that can be
+// made to fit Dotty/IntelliJ trees while universe.Tree and blackbox.Context
+// are tied to scala-compiler.
 class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
   val name = "socrates"
   val description = "Implementation of new-style def macros for scalac"
@@ -32,8 +45,8 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
       else {
         macroLogVerbose(s"looking for macro implementation: ${expandee.symbol}")
         def mkResolver =
-          new PluginRuntimeResolver(expandee.symbol).resolveRuntime()
-        Some(newMacroRuntimesCache.getOrElseUpdate(expandee.symbol, mkResolver))
+          new SocratesRuntimeResolver(expandee.symbol).resolveRuntime()
+        Some(socratesRuntimesCache.getOrElseUpdate(expandee.symbol, mkResolver))
       }
     }
 
@@ -61,22 +74,22 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
     // =============
     // Macro Runtime
     // =============
-    private lazy val pluginMacroClassloader: ClassLoader = {
+    private lazy val socratesClassloader: ClassLoader = {
       val classpath = global.classPath.asURLs
       macroLogVerbose("macro classloader: initializing from -cp: %s".format(classpath))
       ScalaClassLoader.fromURLs(classpath, this.getClass.getClassLoader)
     }
 
-    private class PluginRuntimeResolver(sym: Symbol) extends MacroRuntimeResolver(sym) {
+    private class SocratesRuntimeResolver(sym: Symbol) extends MacroRuntimeResolver(sym) {
       override def resolveJavaReflectionRuntime(defaultClassLoader: ClassLoader): MacroRuntime = {
         // NOTE: defaultClassLoader only includes libraryClasspath + toolClasspath.
         // We need to include pluginClasspath, so that the new macro shim can instantiate
         // ScalacUniverse and ScalacContext.
-        super.resolveJavaReflectionRuntime(pluginMacroClassloader)
+        super.resolveJavaReflectionRuntime(socratesClassloader)
       }
     }
 
-    private val newMacroRuntimesCache =
+    private val socratesRuntimesCache =
       perRunCaches.newWeakMap[Symbol, MacroRuntime]
 
     // ================
@@ -92,7 +105,7 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
       }
       def success(macroImplRef: Tree) = {
         // +scalac deviation
-        val pickle = socratesMacro.pickle(macroImplRef) // custom socrates pickle.
+        val pickle = socratesMacro.socratesPickle(macroImplRef) // custom socrates pickle.
         // -scalac deviation
         val annotInfo = AnnotationInfo(definitions.MacroImplAnnotation.tpe, List(pickle), Nil)
         macroDef withAnnotation annotInfo
@@ -116,7 +129,7 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
               scala.util.Success(compiler.macroImplRef)
             } catch {
               // +scalac deviation
-              case PrivateMacroImplException(ex) =>
+              case SocratesMacroImplException(ex) =>
                 // -scalac deviation
                 scala.util.Failure(ex)
             }
@@ -128,7 +141,7 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
             vanillaResult.get
           } catch {
             // +scalac deviation
-            case PrivateMacroImplException(e) =>
+            case SocratesMacroImplException(e) =>
               context.error(macroDdef1.pos, e.toString)
               EmptyTree
             // -scalac deviation
@@ -143,7 +156,7 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
         reportAmbiguousErrors = false
       )
       typed match {
-        case SilentResultValue(macroImplRef @ SocratesShape()) =>
+        case SilentResultValue(macroImplRef @ SocratesMacroImplReference()) =>
           Some(macroImplRef)
         case SilentResultValue(macroError) =>
           reporter.error(macroError.pos, showCode(macroError, printTypes = true))
@@ -155,13 +168,16 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
 
     }
 
-    object PrivateMacroImplException {
+    // Wrapper to catch private DefaultMacroCompiler.MacroImplResolutionException.
+    object SocratesMacroImplException {
       def unapply(ex: Exception): Option[Exception] = {
         if (ex.getClass.getName.contains("MacroImplResolutionException")) Some(ex)
         else None
       }
     }
-    object SocratesShape {
+
+    // Copy-paste of TreeInfo.MacroImplReference and adapted to socrates macros.
+    object SocratesMacroImplReference {
       private def refPart(tree: Tree): Tree = tree match {
         case TypeApply(fun, _) => refPart(fun)
         case ref: RefTree => ref
@@ -179,7 +195,6 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
       private val socratesTypeTag: Symbol =
         rootMirror.getPackageObject("scala.macros").info.member(TypeName("WeakTypeTag"))
       def unapply(symbol: Symbol): Boolean = symbol == socratesTypeTag
-
     }
 
     object SocratesTypedTree {
@@ -240,8 +255,9 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
       }
     }
 
-    // Copy-paste of MacroImplBinding.pickle and adapted to socrates macros.
-    def pickle(macroImplRef: Tree): Tree = {
+    // Copy-paste of scala.tools.nsc.typechecker.Macros.MacroImplBinding.pickle
+    // and adapted to socrates macros.
+    def socratesPickle(macroImplRef: Tree): Tree = {
       val runDefinitions = currentRun.runDefinitions
       import runDefinitions._
       val treeInfo.MacroImplReference(isBundle, isBlackbox, owner, macroImpl, targs) =
@@ -339,13 +355,15 @@ class SocratesCompilerPlugin(val global: Global) extends Plugin { self =>
       val socratesContext = expandee.attachments
         .get[MacroRuntimeAttachment]
         .flatMap(_.macroContext)
-        .getOrElse(mkSocratesContext(typer, prefix, expandee))
+        .getOrElse(socratesMacroContext(typer, prefix, expandee))
       scala.macros.universeStore.set(ScalacUniverse(socratesContext))
       val socratesArgs = standardArgs.copy(c = socratesContext)
       socratesArgs
     }
 
-    def mkSocratesContext(typer: Typer, prefixTree: Tree, expandeeTree: Tree): MacroContext = {
+    // Copy-paste of scala.tools.nsc.typechecker.Macsros.macroContext
+    // and adapted to socrates macros.
+    def socratesMacroContext(typer: Typer, prefixTree: Tree, expandeeTree: Tree): MacroContext = {
       new {
         val universe: self.global.type = self.global
         val callsiteTyper: universe.analyzer.Typer =
